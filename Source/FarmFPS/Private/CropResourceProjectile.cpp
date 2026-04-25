@@ -28,7 +28,6 @@ void ACropResourceProjectile::BeginPlay()
 	{
 		_cropCollider->OnComponentBeginOverlap.AddDynamic(this, &ACropResourceProjectile::OnComponentOverlap);
 	}
-	
 }
 
 void ACropResourceProjectile::EndPlay(EEndPlayReason::Type EndPlayReason)
@@ -43,19 +42,12 @@ void ACropResourceProjectile::EndPlay(EEndPlayReason::Type EndPlayReason)
 
 void ACropResourceProjectile::OnComponentOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	if (ensure(IsValid(OtherActor)))
+	if (ensure(IsValid(OtherActor)) && ensure(IsValid(GetOwner())))
 	{
 		UCropComponent* cropComponent = OtherActor->FindComponentByClass<UCropComponent>();
 		if (IsValid(cropComponent))
 		{
-			if (_cropResourceType == ECropResourceType::Light)
-			{
-				cropComponent->AddLight(_resourceAmount);
-			}
-			else if (_cropResourceType == ECropResourceType::Water)
-			{
-				cropComponent->AddWater(_resourceAmount);
-			}
+			cropComponent->AddCropResourceValue(_cropResourceType, _resourceAmount.GetModifiedValue(this));
 		}
 	}
 }

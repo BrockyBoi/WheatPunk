@@ -2,10 +2,8 @@
 
 #pragma once
 
-#include "ResourceData.h"
-
-// UE
-#include "CoreMinimal.h"
+// Brock
+#include "ModifiedValueData.h"
 
 // Generated
 #include "CraftingData.generated.h"
@@ -15,9 +13,9 @@ struct FCraftingData
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
-	EResourceType ResourceProductType;
+	UPROPERTY(EditDefaultsOnly, Category = "Input", BlueprintReadOnly)
+	TArray<FModifiedResourceValue> RequiredResources;
 
-	UPROPERTY(EditDefaultsOnly)
-	TMap<EResourceType, uint16> RequiredResources;
+	UPROPERTY(EditDefaultsOnly, Category = "Output", BlueprintReadOnly)
+	TArray<FModifiedResourceValue> ResourceProducts;
 };

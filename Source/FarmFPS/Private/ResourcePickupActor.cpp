@@ -2,7 +2,14 @@
 
 #include "ResourcePickupActor.h"
 
+// Modules
+#include "FarmFPSCharacter.h"
+
 //Brock
+#include "DayNightCycleManager.h"
+#include "FarmFPSUtilities.h"
+#include "ObjectiveManager.h"
+#include "ObjectiveTypeTags.h"
 #include "ResourceInventory.h"
 
 // UE
@@ -25,6 +32,8 @@ AResourcePickupActor::AResourcePickupActor()
 	_playerCollider->SetSphereRadius(16.0f);
 	_playerCollider->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	_playerCollider->CanCharacterStepUpOn = ECanBeCharacterBase::ECB_No;
+
+	_playerCollider->SetGenerateOverlapEvents(true);
 }
 
 void AResourcePickupActor::BeginPlay()
@@ -44,6 +53,12 @@ void AResourcePickupActor::BeginPlay()
 	{
 		_capsuleCollider->OnComponentHit.AddDynamic(this, &AResourcePickupActor::OnCapsuleColliderHit);
 	}
+
+	UDayNightCycleManager* dayNightCycle = FarmFPSUtilities::GetDayNightCycleManager(this);
+	if (ensure(IsValid(dayNightCycle)))
+	{
+		dayNightCycle->OnDayEnd.AddUObject(this, &AResourcePickupActor::OnDayEnd);
+	}
 }
 
 void AResourcePickupActor::EndPlay(EEndPlayReason::Type EndPlayReason)
@@ -58,6 +73,12 @@ void AResourcePickupActor::EndPlay(EEndPlayReason::Type EndPlayReason)
 		_capsuleCollider->OnComponentHit.RemoveAll(this);
 	}
 
+	UDayNightCycleManager* dayNightCycle = FarmFPSUtilities::GetDayNightCycleManager(this);
+	if (IsValid(dayNightCycle))
+	{
+		dayNightCycle->OnDayEnd.RemoveAll(this);
+	}
+
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -65,18 +86,24 @@ void AResourcePickupActor::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	//SetActorLocation(FVector(GetActorLocation().X, GetActorLocation().Y, _startingHeight + FMath::Sin(GetWorld()->GetTimeSeconds() * _bounceRate * _bounceVariance) * 10.f));
 	AddActorLocalRotation(FRotator(0.f, _rotationRate * DeltaTime * _rotationVariance, 0.f));
 }
 
 void AResourcePickupActor::OnComponentOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	if (IsValid(OtherActor))
+	AFarmFPSCharacter* player = Cast<AFarmFPSCharacter>(OtherActor);
+	if (IsValid(player))
 	{
-		UResourceInventory* inventory = OtherActor->FindComponentByClass<UResourceInventory>();
+		UResourceInventory* inventory = player->FindComponentByClass<UResourceInventory>();
 		if (IsValid(inventory) && inventory->CanAddResource(_cropType, _yieldAmount))
 		{
 			inventory->AddResource(_cropType, _yieldAmount);
+
+			UObjectiveManager* objectiveManager = FarmFPSUtilities::GetObjectiveManager(this);
+			if (ensure(IsValid(objectiveManager)))
+			{
+				objectiveManager->IncrementObjectiveProgress(ObjectiveTypeTags::CollectResource, _cropType, _yieldAmount);
+			}
 
 			Destroy();
 		}
@@ -87,7 +114,12 @@ void AResourcePickupActor::OnCapsuleColliderHit(UPrimitiveComponent* HitComp, AA
 {
 	if (ensure(IsValid(_capsuleCollider)))
 	{
-		_capsuleCollider->SetSimulatePhysics(false);
+		//_capsuleCollider->SetSimulatePhysics(false);
 	}
+}
+
+void AResourcePickupActor::OnDayEnd()
+{
+	Destroy();
 }
 

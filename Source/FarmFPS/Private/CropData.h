@@ -2,21 +2,12 @@
 
 #pragma once
 
-// Brock
-#include "ResourceData.h"
-
 // UE
 #include "CoreMinimal.h"
+#include "GameplayTagContainer.h"
 
 // Generated
 #include "CropData.generated.h"
-
-UENUM(BlueprintType)
-enum class ECropResourceType : uint8
-{
-	Water,
-	Light
-};
 
 USTRUCT(BlueprintType)
 struct FCropData
@@ -24,10 +15,10 @@ struct FCropData
 	GENERATED_BODY()
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
-	float WaterNeeded;
+	int WaterNeeded;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
-	float LightNeeded;
+	int LightNeeded;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
 	float StartingScaleSize;
@@ -38,16 +29,15 @@ struct FCropData
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
 	uint8 NumberOfPickupsToDrop;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
-	EResourceType ResourceType;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, meta = (Categories = "ResourceType."))
+	FGameplayTag ResourceType;
 
 	FCropData()
 	{
 		StartingScaleSize = 0.5f;
 		FinalScaleSize = 2.5f;
-		WaterNeeded = 100.0f;
-		LightNeeded = 100.0f;
+		WaterNeeded = 100;
+		LightNeeded = 100;
 		NumberOfPickupsToDrop = 3;
-		ResourceType = EResourceType::Wheat;
 	}
 };

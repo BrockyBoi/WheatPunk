@@ -2,12 +2,10 @@
 
 #pragma once
 
-// Brock
-#include "ResourceData.h"
-
 // UE
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "GameplayTagContainer.h"
 
 // Generated
 #include "ResourceInventory.generated.h"
@@ -20,29 +18,45 @@ class UResourceInventory : public UActorComponent
 public:	
 	UResourceInventory();
 
-	void AddResource(EResourceType cropType, uint16 yieldAmount);
-	void RemoveResource(EResourceType cropType, uint16 yieldAmount);
+	UFUNCTION(BlueprintCallable)
+	void AddResource(const FGameplayTag& resourceType, float amount);
+
+	void SetResourceCap(const FGameplayTag& resourceType, float cap);
+
+	UFUNCTION(BlueprintCallable)
+	void RemoveResource(const FGameplayTag& resourceType, float amount);
+	void SetResourceAmount(const FGameplayTag& resourceType, float amount);
 
 	void AddAllResourcesInInventory(UResourceInventory* otherInventory);
 
-	bool CanAddResource(EResourceType cropType, uint16 amount) const;
+	bool CanAddResource(const FGameplayTag& resourceType, float amount) const;
 
 	UFUNCTION(BlueprintPure)
-	int GetResourceCount(EResourceType cropType) const;
+	float GetResourceCount(const FGameplayTag& resourceType) const;
 
 	UFUNCTION(BlueprintPure)
-	bool HasResourceAmount(EResourceType cropType, int amount) const;
+	bool HasResourceAmount(const FGameplayTag& resourceType, float amount) const;
 
-	uint16 GetResourceCap(EResourceType resourceType) const;
+	uint16 GetResourceCap(const FGameplayTag& resourceType) const;
+
+	DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnResourceCountChangedEvent, const FGameplayTag&, resourceType, float, newAmount);
+	
+	UPROPERTY(BlueprintAssignable)
+	FOnResourceCountChangedEvent OnResourceCountChanged;
 
 protected:
-	virtual void BeginPlay() override;		
+	virtual void BeginPlay() override;
+	virtual void EndPlay(EEndPlayReason::Type EndPlayReason) override;
 
 private:
-	void CheckInitializeMap(EResourceType cropType);
+	UFUNCTION()
+	void OnDayEnd();
 
-	TMap<EResourceType, uint16> _resourcesMap;
+	void CheckInitializeMap(const FGameplayTag& cropType);
+	void ClearAllExceptMoney();
+
+	TMap<FGameplayTag, float> _resourcesMap;
 
 	UPROPERTY(EditDefaultsOnly)
-	TMap<EResourceType, uint16> _resourceCaps;
+	TMap<FGameplayTag, float> _resourceCaps;
 };

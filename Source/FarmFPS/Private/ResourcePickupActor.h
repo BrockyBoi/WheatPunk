@@ -2,12 +2,10 @@
 
 #pragma once
 
-// Brock
-#include "ResourceData.h"
-
 // UE
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "GameplayTagContainer.h"
 
 // Generated
 #include "ResourcePickupActor.generated.h"
@@ -40,6 +38,9 @@ protected:
 	UFUNCTION()
 	void OnCapsuleColliderHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit);
 
+	UFUNCTION()
+	void OnDayEnd();
+
 	UPROPERTY(EditDefaultsOnly, Category = "Movement")
 	float _rotationRate = 0.f;
 
@@ -61,8 +62,8 @@ protected:
 	UPROPERTY(EditAnywhere)
 	UStaticMeshComponent* _staticMesh = nullptr;
 
-	UPROPERTY(EditDefaultsOnly, Category = "Crop Yield")
-	EResourceType _cropType;
+	UPROPERTY(EditDefaultsOnly, Category = "Crop Yield", meta = (Categories = "ResourceType."))
+	FGameplayTag _cropType;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Crop Yield")
 	uint16 _yieldAmount = 1;

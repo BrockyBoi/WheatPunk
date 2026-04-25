@@ -1,9 +1,17 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "FarmFPSCharacter.h"
+
+// Brock
+#include "ConstantCropAffectorArea.h"
+#include "CropComponent.h"
+#include "PerkManager.h"
+
+// UE
 #include "Animation/AnimInstance.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/SphereComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "EnhancedInputComponent.h"
 #include "InputActionValue.h"
@@ -23,6 +31,9 @@ AFarmFPSCharacter::AFarmFPSCharacter()
 	FirstPersonMesh->FirstPersonPrimitiveType = EFirstPersonPrimitiveType::FirstPerson;
 	FirstPersonMesh->SetCollisionProfileName(FName("NoCollision"));
 
+	_groundSlamSphereCollider = CreateDefaultSubobject<USphereComponent>(TEXT("Ground Slam Sphere Collider"));
+	_groundSlamSphereCollider->SetupAttachment(GetMesh());
+
 	// Create the Camera Component	
 	FirstPersonCameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("First Person Camera"));
 	FirstPersonCameraComponent->SetupAttachment(FirstPersonMesh, FName("head"));
@@ -33,6 +44,8 @@ AFarmFPSCharacter::AFarmFPSCharacter()
 	FirstPersonCameraComponent->FirstPersonFieldOfView = 70.0f;
 	FirstPersonCameraComponent->FirstPersonScale = 0.6f;
 
+	_perkManager = CreateDefaultSubobject<UPerkManager>(TEXT("PerkManager"));
+
 	// configure the character comps
 	GetMesh()->SetOwnerNoSee(true);
 	GetMesh()->FirstPersonPrimitiveType = EFirstPersonPrimitiveType::WorldSpaceRepresentation;
@@ -42,6 +55,58 @@ AFarmFPSCharacter::AFarmFPSCharacter()
 	// Configure character movement
 	GetCharacterMovement()->BrakingDecelerationFalling = 1500.0f;
 	GetCharacterMovement()->AirControl = 0.5f;
+}
+
+void AFarmFPSCharacter::BeginPlay()
+{
+	Super::BeginPlay();
+
+	if (ensure(IsValid(_groundSlamSphereCollider)))
+	{
+		_groundSlamSphereCollider->OnComponentBeginOverlap.AddDynamic(this, &AFarmFPSCharacter::OnGroundSlamComponentOverlap);
+		_groundSlamSphereCollider->SetSphereRadius(_groundSlamExplosionRadius.GetModifiedValue(this));
+		_groundSlamSphereCollider->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+
+	if (ensure(IsValid(_perkManager)))
+	{
+		_perkManager->OnPerkLevelChange.AddDynamic(this, &AFarmFPSCharacter::OnPerkLevelDataChanged);
+		_startingJumpCount = JumpMaxCount;
+		_startingJumpHeight = GetCharacterMovement()->JumpZVelocity;
+	}
+}
+
+void AFarmFPSCharacter::EndPlay(EEndPlayReason::Type EndPlayReason)
+{
+	if (IsValid(_groundSlamSphereCollider))
+	{
+		_groundSlamSphereCollider->OnComponentBeginOverlap.RemoveAll(this);
+	}
+
+	if (IsValid(_perkManager))
+	{
+		_perkManager->OnPerkLevelChange.RemoveAll(this);
+	}
+
+	Super::EndPlay(EndPlayReason);
+}
+
+void AFarmFPSCharacter::OnPerkLevelDataChanged(const FGameplayTag& perkType, const FPerkData& perkData)
+{
+	JumpMaxCount = _startingJumpCount + _extraJumpCount.GetModifiedValue(this);
+	GetCharacterMovement()->JumpZVelocity = _startingJumpHeight + _extraJumpHeight.GetModifiedValue(this);
+}
+
+void AFarmFPSCharacter::OnGroundSlamComponentOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+{
+	if (IsValid(OtherActor))
+	{
+		UCropComponent* cropComponent = OtherActor->FindComponentByClass<UCropComponent>();
+		if (IsValid(cropComponent) && cropComponent->IsCropReadyToBreak())
+		{
+			cropComponent->BreakCrop();
+		}
+	}
 }
 
 void AFarmFPSCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -59,10 +124,26 @@ void AFarmFPSCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 		// Looking/Aiming
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AFarmFPSCharacter::LookInput);
 		EnhancedInputComponent->BindAction(MouseLookAction, ETriggerEvent::Triggered, this, &AFarmFPSCharacter::LookInput);
+
+		EnhancedInputComponent->BindAction(SpawnWaterAffectorAction, ETriggerEvent::Started, this, &AFarmFPSCharacter::OnPressSpawnWaterAffector);
+		EnhancedInputComponent->BindAction(SpawnLightAffectorAction, ETriggerEvent::Started, this, &AFarmFPSCharacter::OnPressSpawnLightAffector);
+
+		EnhancedInputComponent->BindAction(GroundSlamAction, ETriggerEvent::Started, this, &AFarmFPSCharacter::DoGroundSlamStart);
+		EnhancedInputComponent->BindAction(GroundSlamAction, ETriggerEvent::Completed, this, &AFarmFPSCharacter::DoGroundSlamEnd);
 	}
 	else
 	{
 		UE_LOG(LogFarmFPS, Error, TEXT("'%s' Failed to find an Enhanced Input Component! This template is built to use the Enhanced Input system. If you intend to use the legacy system, then you will need to update this C++ file."), *GetNameSafe(this));
+	}
+}
+
+void AFarmFPSCharacter::OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 PreviousCustomMode)
+{
+	if (GetCharacterMovement()->IsWalking() && PrevMovementMode == EMovementMode::MOVE_Falling)
+	{
+		_startedGroundSlam = false;
+		GetCharacterMovement()->GravityScale = 1.f;
+		_groundSlamSphereCollider->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
 }
 
@@ -117,4 +198,64 @@ void AFarmFPSCharacter::DoJumpEnd()
 {
 	// pass StopJumping to the character
 	StopJumping();
+}
+
+void AFarmFPSCharacter::OnPressSpawnWaterAffector()
+{
+	if (ensure(IsValid(_waterAffectorClass)))
+	{
+		FActorSpawnParameters SpawnParams;
+		GetWorld()->SpawnActor<AConstantCropAffectorArea>(_waterAffectorClass, GetActorLocation(), FRotator::ZeroRotator, SpawnParams);
+	}
+}
+
+void AFarmFPSCharacter::OnPressSpawnLightAffector()
+{
+	if (ensure(IsValid(_lightAffectorClass)))
+	{
+		FActorSpawnParameters SpawnParams;
+		GetWorld()->SpawnActor<AConstantCropAffectorArea>(_lightAffectorClass, GetActorLocation(), FRotator::ZeroRotator, SpawnParams);
+	}
+}
+
+void AFarmFPSCharacter::DoGroundSlamStart()
+{
+	if (_startedGroundSlam || GetCharacterMovement()->IsMovingOnGround())
+	{
+		return;
+	}
+
+	GetCharacterMovement()->StopMovementImmediately();
+	GetCharacterMovement()->AirControl = 1.f;
+	GetCharacterMovement()->GravityScale = .1f;
+}
+
+void AFarmFPSCharacter::DoGroundSlamEnd()
+{
+	if (_startedGroundSlam || GetCharacterMovement()->IsMovingOnGround())
+	{
+		return;
+	}
+
+	if (APlayerController* controller = Cast<APlayerController>(GetController()))
+	{
+		FVector outLoc;
+		FRotator outRot;
+		controller->GetPlayerViewPoint(outLoc, outRot);
+		FVector forwardVector = outRot.Vector();
+		forwardVector.Normalize();
+
+		FHitResult hitResult;
+
+		bool hitGround = GetWorld()->LineTraceSingleByChannel(hitResult, GetActorLocation(), GetActorLocation() + (forwardVector * _groundSlamDistanceThreshold.GetModifiedValue(this)), ECollisionChannel::ECC_WorldStatic);
+		if (hitGround)
+		{
+			GetCharacterMovement()->Launch(forwardVector * _groundSlamDashForce);
+			_startedGroundSlam = true;
+
+			GetCharacterMovement()->AirControl = .5f;
+			//GetCharacterMovement()->GravityScale = 1.f;
+			_groundSlamSphereCollider->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		}
+	}
 }
